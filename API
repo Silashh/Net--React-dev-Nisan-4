@@ -1,0 +1,168 @@
+1. Entities Katmanı
+Enums:
+
+
+public enum ApplicationState
+{
+    PENDING,
+    APPROVED,
+    REJECTED,
+    IN_REVIEW,
+    CANCELLED
+}
+
+public enum BootcampState
+{
+    PREPARING,
+    OPEN_FOR_APPLICATION,
+    IN_PROGRESS,
+    FINISHED,
+    CANCELLED
+}
+Application Entity:
+
+
+public class Application
+{
+    public int Id { get; set; }
+    public int ApplicantId { get; set; }
+    public int BootcampId { get; set; }
+    public ApplicationState ApplicationState { get; set; }
+}
+Bootcamp Entity:
+
+
+public class Bootcamp
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public int InstructorId { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public BootcampState BootcampState { get; set; }
+}
+Blacklist Entity:
+
+public class Blacklist
+{
+    public int Id { get; set; }
+    public string Reason { get; set; }
+    public DateTime Date { get; set; }
+    public int ApplicantId { get; set; }
+}
+
+ 2. Repositories Katmanı
+
+Generic Repository Interface:
+
+public interface IRepository<T> where T : class
+{
+    Task<T> GetByIdAsync(int id);
+    Task<List<T>> GetAllAsync();
+    Task<T> AddAsync(T entity);
+    Task<T> UpdateAsync(T entity);
+    Task DeleteAsync(T entity);
+}
+Uygulama Özel Repository Örnekleri (örneğin ApplicationRepository):
+
+
+public interface IApplicationRepository : IRepository<Application> { }
+
+public class ApplicationRepository : IApplicationRepository
+{
+    private readonly DbContext _context;
+    public ApplicationRepository(DbContext context) => _context = context;
+
+    // IRepository metotlarını uygula
+}
+EntityTypeConfiguration Örneği (Fluent API):
+
+public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
+{
+    public void Configure(EntityTypeBuilder<Application> builder)
+    {
+        builder.ToTable("Applications");
+        builder.HasKey(x => x.Id);
+    }
+}
+Sonrasında EF komutları:
+
+
+Add-Migration InitialCreate
+Update-Database
+
+3. Business Katmanı
+Request/Response DTO’lar (örnek Application için):
+
+
+public class CreateApplicationRequest
+{
+    public int ApplicantId { get; set; }
+    public int BootcampId { get; set; }
+}
+
+public class ApplicationResponse
+{
+    public int Id { get; set; }
+    public int ApplicantId { get; set; }
+    public int BootcampId { get; set; }
+    public string State { get; set; }
+}
+Service Interface ve Manager:
+
+
+public interface IApplicationService
+{
+    Task<ApplicationResponse> CreateAsync(CreateApplicationRequest request);
+    Task<List<ApplicationResponse>> GetAllAsync();
+}
+
+public class ApplicationManager : IApplicationService
+{
+    private readonly IApplicationRepository _repository;
+    public ApplicationManager(IApplicationRepository repository) => _repository = repository;
+
+    public async Task<ApplicationResponse> CreateAsync(CreateApplicationRequest request)
+    {
+        var app = new Application
+        {
+            ApplicantId = request.ApplicantId,
+            BootcampId = request.BootcampId,
+            ApplicationState = ApplicationState.PENDING
+        };
+        await _repository.AddAsync(app);
+        return new ApplicationResponse
+        {
+            Id = app.Id,
+            ApplicantId = app.ApplicantId,
+            BootcampId = app.BootcampId,
+            State = app.ApplicationState.ToString()
+        };
+    }
+}
+
+ 4. WebAPI Katmanı
+
+Controller Örneği (ApplicationController):
+
+[ApiController]
+[Route("api/[controller]")]
+public class ApplicationController : ControllerBase
+{
+    private readonly IApplicationService _service;
+    public ApplicationController(IApplicationService service) => _service = service;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateApplicationRequest request)
+    {
+        var result = await _service.CreateAsync(request);
+        return Ok(result);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        var result = await _service.GetAllAsync();
+        return Ok(result);
+    }
+}
